@@ -1,0 +1,49 @@
+buildscript {
+  ext.kotlin_version = "1.9.22"
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+  }
+}
+
+apply plugin: "com.android.library"
+apply plugin: "kotlin-android"
+apply plugin: "com.facebook.react"
+
+android {
+  compileSdk 34
+  namespace "com.marcinolek.reactnativehubspotwrapper"
+
+  defaultConfig {
+    minSdk 26
+    targetSdk 34
+  }
+
+  sourceSets {
+    main.java.srcDirs += "src/main/kotlin"
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+}
+
+react {
+  jsRootDir = file("../")
+  libraryName = "HubspotWrapperSpec"
+  codegenJavaPackageName = "com.marcinolek.reactnativehubspotwrapper"
+}
+
+dependencies {
+  implementation "com.facebook.react:react-native:+"
+  implementation "com.hubspot.mobilechatsdk:mobile-chat-sdk-android:1.0.8"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.1"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1"
+}
