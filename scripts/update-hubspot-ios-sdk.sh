@@ -106,6 +106,24 @@ rm -rf "${TARGET_DIR}"
 mkdir -p "$(dirname "${TARGET_DIR}")"
 cp -R "${TMP_DIR}/upstream/Sources/HubspotMobileSDK" "${TARGET_DIR}"
 
+# Drop upstream Xcode documentation bundle: ~800KB of PNGs and markdown files
+# that the podspec does not pick up and that aren't needed by consumers.
+rm -rf "${TARGET_DIR}/Documentation.docc"
+
+# MIT requires distributing the upstream license alongside the vendored sources.
+UPSTREAM_LICENSE=""
+for candidate in LICENSE.txt LICENSE LICENSE.md; do
+  if [[ -f "${TMP_DIR}/upstream/${candidate}" ]]; then
+    UPSTREAM_LICENSE="${TMP_DIR}/upstream/${candidate}"
+    break
+  fi
+done
+if [[ -z "${UPSTREAM_LICENSE}" ]]; then
+  echo "Could not find an upstream LICENSE file at tag ${TAG}" >&2
+  exit 1
+fi
+cp "${UPSTREAM_LICENSE}" "${TARGET_DIR}/LICENSE.txt"
+
 echo "Applying CocoaPods compatibility patches..."
 apply_cocoapods_compat_patches
 

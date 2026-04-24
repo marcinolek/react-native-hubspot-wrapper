@@ -28,6 +28,9 @@
   },
   "author": "Marcin Olek",
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "update:hubspot:ios": "bash ./scripts/update-hubspot-ios-sdk.sh"
   },

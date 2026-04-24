@@ -1,6 +1,30 @@
 # react-native-hubspot-wrapper
 
-TurboModule-only React Native wrapper for HubSpot mobile chat SDK.
+TurboModule-only React Native wrapper for the HubSpot Mobile Chat SDK.
+
+> Unofficial. Not affiliated with, endorsed by, or sponsored by HubSpot, Inc.
+> "HubSpot" is a trademark of HubSpot, Inc.
+
+## Status
+
+Early release (`0.x`). The public API may evolve before `1.0`.
+
+Currently supported:
+
+- `initialize()`
+- `openChat(chatflow)`
+- `setIdentity({ identityToken, email? })`
+- `setProperties(properties)`
+- `clearUserData()`
+
+Not yet implemented (planned):
+
+- Push notifications (FCM token registration on Android, APNs token on iOS,
+  deep-linking from a notification into the relevant chat)
+- Chat lifecycle events (open / close / message-received callbacks exposed to JS)
+- Custom theming hooks beyond what the HubSpot dashboard chatflow already provides
+
+PRs welcome.
 
 ## Requirements
 
@@ -48,9 +72,17 @@ await HubspotWrapper.openChat('support');
 ## iOS SDK source strategy
 
 This package vendors HubSpot iOS SDK source files under `ios/HubspotMobileSDK`.
-The files are intentionally committed to git for reproducible CocoaPods builds.
+The files are intentionally committed to git for reproducible CocoaPods builds,
+since React Native does not yet integrate Swift Package Manager natively.
 
 Current vendored source metadata is tracked in `HUBSPOT_IOS_SDK_VERSION.json`.
+The upstream `LICENSE.txt` is preserved alongside the vendored sources at
+`ios/HubspotMobileSDK/LICENSE.txt`, in compliance with the MIT license HubSpot
+ships their iOS SDK under.
+
+When React Native adds first-class SwiftPM support, the vendored sources can be
+removed and replaced with a `Package.swift` dependency without any consumer-facing
+API changes.
 
 ## Updating vendored HubSpot iOS SDK
 
@@ -75,3 +107,13 @@ After updating:
 1. run `cd ios && pod install` in the consuming app
 2. run iOS/Android compile checks
 3. commit updated `ios/HubspotMobileSDK` and `HUBSPOT_IOS_SDK_VERSION.json`
+
+## License
+
+This wrapper is released under the [MIT license](./LICENSE).
+
+The vendored HubSpot iOS SDK source under `ios/HubspotMobileSDK/` is also
+MIT-licensed by HubSpot, Inc. — see `ios/HubspotMobileSDK/LICENSE.txt`.
+
+The HubSpot Android SDK is not redistributed by this package; it is fetched
+from Maven Central by the consuming app under HubSpot's terms.
