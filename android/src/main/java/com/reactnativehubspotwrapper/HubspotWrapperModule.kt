@@ -1,6 +1,7 @@
 package com.marcinolek.reactnativehubspotwrapper
 
 import android.content.Intent
+import android.webkit.CookieManager
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReadableArray
@@ -9,6 +10,8 @@ import com.hubspot.mobilesdk.HubspotWebActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 class HubspotWrapperModule(reactContext: ReactApplicationContext) :
   NativeHubspotWrapperSpec(reactContext) {
@@ -70,9 +73,20 @@ class HubspotWrapperModule(reactContext: ReactApplicationContext) :
     CoroutineScope(Dispatchers.Main).launch {
       try {
         hubspotManager.logout()
+        clearWebViewCookies()
         promise.resolve(null)
       } catch (error: Exception) {
         promise.reject("CLEAR_USER_DATA_ERROR", "Failed to clear HubSpot user data", error)
+      }
+    }
+  }
+
+  private suspend fun clearWebViewCookies() {
+    suspendCancellableCoroutine<Unit> { continuation ->
+      val cookieManager = CookieManager.getInstance()
+      cookieManager.removeAllCookies {
+        cookieManager.flush()
+        continuation.resume(Unit)
       }
     }
   }
