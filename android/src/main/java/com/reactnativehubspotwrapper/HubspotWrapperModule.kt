@@ -10,9 +10,6 @@ import com.hubspot.mobilesdk.HubspotWebActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
-
 class HubspotWrapperModule(reactContext: ReactApplicationContext) :
   NativeHubspotWrapperSpec(reactContext) {
 
@@ -73,7 +70,7 @@ class HubspotWrapperModule(reactContext: ReactApplicationContext) :
     CoroutineScope(Dispatchers.Main).launch {
       try {
         hubspotManager.logout()
-        clearWebViewCookies()
+        clearHubspotCookies()
         promise.resolve(null)
       } catch (error: Exception) {
         promise.reject("CLEAR_USER_DATA_ERROR", "Failed to clear HubSpot user data", error)
@@ -81,17 +78,28 @@ class HubspotWrapperModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  private suspend fun clearWebViewCookies() {
-    suspendCancellableCoroutine<Unit> { continuation ->
-      val cookieManager = CookieManager.getInstance()
-      cookieManager.removeAllCookies {
-        cookieManager.flush()
-        continuation.resume(Unit)
+  private fun clearHubspotCookies() {
+    val cookieManager = CookieManager.getInstance()
+    val hubspotDomains = listOf("https://app.hubspot.com", "https://app.hubapi.com")
+
+    for (domain in hubspotDomains) {
+      val cookiesString = cookieManager.getCookie(domain) ?: continue
+      cookiesString.split(";").forEach { cookiePair ->
+        val cookieName = cookiePair.trim().split("=").firstOrNull()?.trim() ?: return@forEach
+        if (cookieName in COOKIES_TO_DELETE) {
+          cookieManager.setCookie(domain, "$cookieName=; Max-Age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT")
+        }
       }
     }
+
+    cookieManager.flush()
   }
 
   companion object {
     const val NAME = "NativeHubspotWrapper"
+
+    // Mirrors iOS HubspotManager.cookiesToDeleteWhenClearingData — only these cookies
+    // are needed to reset chat session state; removing all cookies is too destructive.
+    private val COOKIES_TO_DELETE = setOf("hubspotutk", "messagesUtk")
   }
 }
