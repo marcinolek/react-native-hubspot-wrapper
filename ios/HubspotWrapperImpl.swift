@@ -143,6 +143,173 @@ public class HubspotWrapperImpl: NSObject {
     await store.removeData(ofTypes: allTypes, for: matching)
   }
 
+  /// Install a `WKUserScript` on `controller` that hides any "back to inbox" /
+  /// conversations-list navigation rendered by the HubSpot chat widget.
+  ///
+  /// Called from the patched `HubspotChatWebView.WebviewCoordinator.setupScripts()`
+  /// (see `update-hubspot-ios-sdk.sh` for the patch that re-applies that hook on
+  /// every SDK sync). The actual heuristic-based hide JS lives here in our own
+  /// non-vendored file so SDK updates don't churn the implementation.
+  ///
+  /// We can't rely on a single CSS selector because:
+  ///   - HubSpot's widget uses minified/hashed class names that change across
+  ///     releases.
+  ///   - Parts of the widget render inside shadow roots, which a top-level
+  ///     `<style>` doesn't pierce.
+  ///   - The button can mount after first paint as the widget hydrates.
+  ///
+  /// The injected script installs a `MutationObserver` that walks the full tree
+  /// (recursing into open shadow roots) and hides anything that *behaves* like a
+  /// back button - matched on `aria-label`, `data-test-id`, `title`, `id`, `class`,
+  /// and visible text. Re-scans periodically for the first few seconds to cover
+  /// late-mounted shadow roots. Injected at document start in every frame.
+  @objc public static func installBackButtonHider(on controller: WKUserContentController) {
+    let script = WKUserScript(
+      source: backButtonHiderJS,
+      injectionTime: .atDocumentStart,
+      forMainFrameOnly: false
+    )
+    controller.addUserScript(script)
+  }
+
+  /// Heuristic-based hider for the chat widget's back/inbox button. Designed to
+  /// work both as a `WKUserScript` (per-frame at `.atDocumentStart`) and as a
+  /// one-shot `evaluateJavascript` payload from the Android side - hence the
+  /// `walkAllFrames` / `bootstrap` split with the per-document install guard.
+  /// Keep this string in lockstep with `HubspotBackButtonHider.BACK_BUTTON_HIDER_JS`
+  /// in the Android wrapper. Insert spaces at camelCase boundaries and collapse
+  /// underscores/dashes to spaces so word-boundary matching catches class names
+  /// like `ConversationView__BackButton`. (In JS regex, `_` is a word char, so
+  /// without this `\\bback\\b` would fail against `..._back_...`.)
+  private static let backButtonHiderJS: String = """
+    (function() {
+      function bootstrap(win) {
+        var doc;
+        try { doc = win.document; } catch (_) { return; }
+        if (!doc || doc.__rnHubspotHiderInstalled) return;
+        doc.__rnHubspotHiderInstalled = true;
+
+        var BACK_PATTERN = /\\b(back|inbox|previous|conversations)\\b/i;
+
+        function normalize(s) {
+          if (!s) return '';
+          return String(s)
+            .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+            .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+            .replace(/[_-]+/g, ' ')
+            .toLowerCase();
+        }
+
+        function looksLikeBackControl(el) {
+          if (!el || el.nodeType !== 1) return false;
+          if (el.getAttribute('data-rn-hubspot-wrapper-hidden') === '1') return false;
+          var tag = el.tagName;
+          if (tag !== 'BUTTON' && tag !== 'A' && el.getAttribute('role') !== 'button') return false;
+          var attrs = [
+            el.getAttribute('aria-label'),
+            el.getAttribute('data-test-id'),
+            el.getAttribute('data-test'),
+            el.getAttribute('title'),
+            el.getAttribute('id'),
+            el.getAttribute('class')
+          ];
+          for (var i = 0; i < attrs.length; i++) {
+            if (attrs[i] && BACK_PATTERN.test(normalize(attrs[i]))) return true;
+          }
+          var text = (el.textContent || '').trim();
+          if (text && text.length <= 32 && BACK_PATTERN.test(normalize(text))) return true;
+          return false;
+        }
+
+        function hide(el) {
+          try {
+            el.setAttribute('data-rn-hubspot-wrapper-hidden', '1');
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('visibility', 'hidden', 'important');
+            el.style.setProperty('pointer-events', 'none', 'important');
+          } catch (_) {}
+        }
+
+        // Hide `el`, then walk up to a few ancestors and also hide any wrapper
+        // that becomes empty (no remaining unhidden element children) as a
+        // result. HubSpot's chat header has a back-button slot whose padding
+        // / min-width / flex-basis stays around even when the inner button is
+        // `display:none`, which shows up as the avatar shifting right after the
+        // first message is sent. Capping at depth 3 keeps us inside the header.
+        function hideUpwards(el) {
+          hide(el);
+          var current = el;
+          for (var depth = 0; depth < 3; depth++) {
+            var parent = current.parentElement;
+            if (!parent) break;
+            if (parent === doc.documentElement || parent === doc.body) break;
+            var visibleCount = 0;
+            var children = parent.children;
+            for (var i = 0; i < children.length; i++) {
+              if (children[i].getAttribute('data-rn-hubspot-wrapper-hidden') !== '1') {
+                visibleCount++;
+              }
+            }
+            if (visibleCount > 0) break;
+            hide(parent);
+            current = parent;
+          }
+        }
+
+        var observed = new WeakSet();
+        function scanRoot(root) {
+          if (!root) return;
+          try {
+            var nodes = root.querySelectorAll('button, a, [role="button"]');
+            for (var i = 0; i < nodes.length; i++) {
+              if (looksLikeBackControl(nodes[i])) hideUpwards(nodes[i]);
+            }
+            var all = root.querySelectorAll('*');
+            for (var j = 0; j < all.length; j++) {
+              var sr = all[j].shadowRoot;
+              if (sr) {
+                scanRoot(sr);
+                attachObserver(sr);
+              }
+            }
+          } catch (_) {}
+        }
+
+        function attachObserver(root) {
+          if (!root || observed.has(root)) return;
+          observed.add(root);
+          try {
+            var mo = new MutationObserver(function() { scanRoot(root); });
+            mo.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'data-test-id', 'data-test', 'title', 'class'] });
+          } catch (_) {}
+        }
+
+        function go() {
+          scanRoot(doc);
+          attachObserver(doc.documentElement || doc);
+        }
+
+        if (doc.readyState === 'loading') {
+          doc.addEventListener('DOMContentLoaded', go, { once: true });
+        } else {
+          go();
+        }
+      }
+
+      function walkAllFrames(win) {
+        if (!win) return;
+        bootstrap(win);
+        try {
+          for (var i = 0; i < win.frames.length; i++) {
+            walkAllFrames(win.frames[i]);
+          }
+        } catch (_) {}
+      }
+
+      walkAllFrames(window);
+    })();
+    """
+
   private static func topViewController(
     base: UIViewController? = UIApplication.shared.connectedScenes
       .compactMap { $0 as? UIWindowScene }
