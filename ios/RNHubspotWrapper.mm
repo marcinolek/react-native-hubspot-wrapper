@@ -59,8 +59,13 @@ RCT_EXPORT_MODULE(NativeHubspotWrapper)
 
 - (void)clearUserData:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
 {
-  [_impl clearUserData];
-  resolve(nil);
+  // Important: do not resolve until the impl reports completion. The impl awaits the
+  // actual chat-identity cookie deletion before invoking this block. Resolving sooner
+  // creates a race where JS-level `await clearUserData()` returns before HubSpot's
+  // visitor cookies are gone, and the next `openChat` re-uses the previous identity.
+  [_impl clearUserData:^{
+    resolve(nil);
+  }];
 }
 
 @end
