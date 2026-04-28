@@ -1,5 +1,6 @@
 package com.marcinolek.reactnativehubspotwrapper
 
+import android.app.Application
 import android.content.Intent
 import android.util.Log
 import android.webkit.CookieManager
@@ -19,6 +20,14 @@ class HubspotWrapperModule(reactContext: ReactApplicationContext) :
 
   private val appContext = reactContext.applicationContext
   private lateinit var hubspotManager: HubspotManager
+
+  init {
+    // Install the chat back-button hider as soon as the wrapper module is created.
+    // The hider only does work when `HubspotWebActivity` actually resumes, so this
+    // is a cheap one-time `Application.ActivityLifecycleCallbacks` registration.
+    // See `HubspotBackButtonHider` for why this lives outside the activity itself.
+    (appContext as? Application)?.let { HubspotBackButtonHider.installOnce(it) }
+  }
 
   override fun getName(): String = NAME
 
