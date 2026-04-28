@@ -1,6 +1,7 @@
 package com.marcinolek.reactnativehubspotwrapper
 
 import android.content.Intent
+import android.util.Log
 import android.webkit.CookieManager
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -72,16 +73,94 @@ class HubspotWrapperModule(reactContext: ReactApplicationContext) :
   override fun clearUserData(promise: Promise) {
     CoroutineScope(Dispatchers.Main).launch {
       try {
+        Log.i(TAG, "clearUserData: invoked")
         hubspotManager.logout()
-        clearWebViewCookies()
+        clearHubspotSessionCookies()
+        Log.i(TAG, "clearUserData: done")
         promise.resolve(null)
       } catch (error: Exception) {
+        Log.e(TAG, "clearUserData: failed", error)
         promise.reject("CLEAR_USER_DATA_ERROR", "Failed to clear HubSpot user data", error)
       }
     }
   }
 
-  private suspend fun clearWebViewCookies() {
+  /**
+   * Mirror the iOS SDK's `cookiesToDeleteWhenClearingData` behavior: only drop the cookies that
+   * tie the embedded chat WebView to a previous HubSpot visitor identity (`hubspotutk`,
+   * `messagesUtk`). Anything else - Cloudflare bot-management cookies, future preference cookies,
+   * etc. - is intentionally preserved so the next chat session starts with a fresh identity but
+   * doesn't pay any unrelated cold-start tax.
+   *
+   * Implementation notes for Android:
+   *
+   * - `CookieManager.getCookie(url)` only returns `name=value` pairs - no `Domain`/`Path`
+   *   metadata - so to delete a cookie reliably we have to overwrite it with an expired date
+   *   under every plausible scope (host-only, exact host `Domain`, parent `Domain`). Writes
+   *   whose `Domain` doesn't match an existing cookie are silently rejected by the cookie store,
+   *   so issuing all three is safe.
+   *
+   * - The chat URL's host is computed from `hubspot-info.json` using the same rule as the SDK's
+   *   internal `Hublet`/`Environment` value classes (which are package-private):
+   *
+   *     `https://app[-<hublet>].hubspot[qa].com/`
+   *
+   *   For example: hublet `na2` + env `prod` -> `https://app-na2.hubspot.com/`.
+   *   Hublet `na1` is special-cased to `app.hubspot.com`. Env `qa` adds the `qa` suffix
+   *   to the apex (`hubspotqa.com`).
+   *
+   * - If `HubspotManager` hasn't been configured yet, we fall back to `removeAllCookies()` so
+   *   we never leak chat identity even in misconfigured states.
+   *
+   * Caveat (matches iOS): clearing `messagesUtk` resets the visitor identity, which causes
+   * HubSpot's chat embed to re-show its cookie consent banner on the next session. This is by
+   * design on HubSpot's side - their chat treats every new visitor id as a new visitor that
+   * must consent. There is no way to keep both "fresh chat" and "no consent reprompt" without
+   * also leaving the previous conversation thread visible to the user.
+   */
+  private suspend fun clearHubspotSessionCookies() {
+    val hubletId = runCatching { hubspotManager.getHublet() }.getOrNull()
+    val environment = runCatching { hubspotManager.getEnvironment() }.getOrNull()
+
+    if (hubletId.isNullOrEmpty() || environment.isNullOrEmpty()) {
+      Log.w(TAG, "clearUserData: missing hublet/environment, falling back to removeAllCookies()")
+      clearAllWebViewCookies()
+      return
+    }
+
+    val cookieManager = CookieManager.getInstance()
+    val urlSuffix = if (environment.equals("qa", ignoreCase = true)) "qa" else ""
+    val rootDomain = "hubspot$urlSuffix.com"
+    val appsSubDomain = if (hubletId.equals("na1", ignoreCase = true)) "app" else "app-$hubletId"
+    val chatHost = "$appsSubDomain.$rootDomain"
+    val chatUrl = "https://$chatHost/"
+
+    val existingCookieNames = cookieManager.getCookie(chatUrl).orEmpty()
+      .split(";")
+      .mapNotNull { it.substringBefore("=").trim().takeIf(String::isNotEmpty) }
+      .toSet()
+
+    val toDelete = COOKIES_TO_CLEAR.filter { it in existingCookieNames }
+    if (toDelete.isEmpty()) {
+      Log.i(TAG, "clearUserData: no chat-identity cookies present at $chatHost, nothing to delete")
+      return
+    }
+
+    Log.i(TAG, "clearUserData: deleting cookies=$toDelete on $chatHost")
+    val expiry = "Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    toDelete.forEach { name ->
+      cookieManager.setCookie(chatUrl, "$name=; $expiry")
+      cookieManager.setCookie(chatUrl, "$name=; Domain=$chatHost; $expiry")
+      cookieManager.setCookie(chatUrl, "$name=; Domain=.$rootDomain; $expiry")
+    }
+
+    suspendCancellableCoroutine<Unit> { continuation ->
+      cookieManager.flush()
+      continuation.resume(Unit)
+    }
+  }
+
+  private suspend fun clearAllWebViewCookies() {
     suspendCancellableCoroutine<Unit> { continuation ->
       val cookieManager = CookieManager.getInstance()
       cookieManager.removeAllCookies {
@@ -93,5 +172,14 @@ class HubspotWrapperModule(reactContext: ReactApplicationContext) :
 
   companion object {
     const val NAME = "NativeHubspotWrapper"
+
+    private const val TAG = "HubspotWrapper"
+
+    /**
+     * Cookies that bind the embedded chat WebView to a specific HubSpot visitor identity.
+     * Matches the iOS SDK's `cookiesToDeleteWhenClearingData`.
+     * See https://knowledge.hubspot.com/privacy-and-consent/what-cookies-does-hubspot-set-in-a-visitor-s-browser
+     */
+    private val COOKIES_TO_CLEAR = listOf("hubspotutk", "messagesUtk")
   }
 }
