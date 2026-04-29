@@ -12,7 +12,7 @@ Early release (`0.x`). The public API may evolve before `1.0`.
 Currently supported:
 
 - `initialize()`
-- `openChat(chatflow)`
+- `openChat(chatflow, options?)`
 - `setIdentity({ identityToken, email? })`
 - `setProperties(properties)`
 - `clearUserData()`
@@ -61,13 +61,38 @@ await HubspotWrapper.setProperties([{ name: 'plan', value: 'pro' }]);
 await HubspotWrapper.openChat('support');
 ```
 
+By default, `openChat` hides HubSpot's "back to inbox" / conversations-list
+button inside the chat widget. This wrapper is opinionated toward single-chat
+support flows, but you can preserve HubSpot's stock UI per chat:
+
+```ts
+await HubspotWrapper.openChat('support', {
+  hideBackToInboxButton: false,
+});
+```
+
 ## API
 
 - `initialize(): Promise<void>`
-- `openChat(chatflow: string): Promise<void>`
+- `openChat(chatflow: string, options?: { hideBackToInboxButton?: boolean }): Promise<void>`
 - `setIdentity({ identityToken, email? }): Promise<void>`
 - `setProperties(properties): Promise<void>`
 - `clearUserData(): Promise<void>`
+
+### `openChat(chatflow, options?)`
+
+Opens the HubSpot chat UI for the provided chatflow.
+
+- `hideBackToInboxButton` defaults to `true`.
+- Set `hideBackToInboxButton: false` to keep HubSpot's default conversations
+  navigation visible.
+
+### `clearUserData()`
+
+Clears the native SDK's current user/session state and waits for HubSpot chat
+visitor cookies/data cleanup to finish before resolving. This is intended for
+logout or account-switch flows so the next chat session does not reuse the
+previous visitor identity.
 
 ## iOS SDK source strategy
 

@@ -34,10 +34,10 @@ RCT_EXPORT_MODULE(NativeHubspotWrapper)
   reject(@"INIT_ERROR", @"Failed to initialize HubSpot SDK", error);
 }
 
-- (void)openChat:(NSString *)chatflow resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
+- (void)openChat:(NSString *)chatflow hideBackToInboxButton:(BOOL)hideBackToInboxButton resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
 {
   NSError *error = nil;
-  BOOL didOpen = [_impl openChat:chatflow error:&error];
+  BOOL didOpen = [_impl openChat:chatflow hideBackToInboxButton:hideBackToInboxButton error:&error];
   if (didOpen) {
     resolve(nil);
     return;

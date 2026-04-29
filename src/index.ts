@@ -7,6 +7,10 @@ export type SetIdentityParams = {
   email?: string | null;
 };
 
+export type OpenChatOptions = {
+  hideBackToInboxButton?: boolean;
+};
+
 function ensureNonEmpty(value: string, fieldName: string): void {
   if (!value || !value.trim()) {
     throw new Error(`\`${fieldName}\` must be a non-empty string.`);
@@ -18,9 +22,9 @@ const HubspotWrapper = {
     return NativeHubspotWrapper.initialize();
   },
 
-  openChat(chatflow: string): Promise<void> {
+  openChat(chatflow: string, options: OpenChatOptions = {}): Promise<void> {
     ensureNonEmpty(chatflow, 'chatflow');
-    return NativeHubspotWrapper.openChat(chatflow);
+    return NativeHubspotWrapper.openChat(chatflow, options.hideBackToInboxButton ?? true);
   },
 
   setIdentity(params: SetIdentityParams): Promise<void> {

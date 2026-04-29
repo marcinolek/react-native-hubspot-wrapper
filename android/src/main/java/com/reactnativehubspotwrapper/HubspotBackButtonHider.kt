@@ -9,6 +9,7 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
+import java.util.WeakHashMap
 
 /**
  * Hides the HubSpot chat widget's "back to inbox" / conversations-list navigation
@@ -38,6 +39,9 @@ import android.webkit.WebView
 internal object HubspotBackButtonHider {
   private const val TAG = "HubspotWrapper"
 
+  const val EXTRA_HIDE_BACK_TO_INBOX_BUTTON =
+    "com.marcinolek.reactnativehubspotwrapper.HIDE_BACK_TO_INBOX_BUTTON"
+
   /**
    * The fully-qualified name of HubSpot's chat activity in the AAR. Matched by
    * string so we don't have to import / depend on it for compile-time resolution.
@@ -57,6 +61,9 @@ internal object HubspotBackButtonHider {
   @Volatile
   private var installed = false
 
+  private val handler = Handler(Looper.getMainLooper())
+  private val scheduledInjections = WeakHashMap<WebView, Runnable>()
+
   @Synchronized
   fun installOnce(app: Application) {
     if (installed) return
@@ -65,6 +72,10 @@ internal object HubspotBackButtonHider {
     app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
       override fun onActivityResumed(activity: Activity) {
         if (activity.javaClass.name != WEB_ACTIVITY_NAME) return
+        if (!activity.intent.getBooleanExtra(EXTRA_HIDE_BACK_TO_INBOX_BUTTON, true)) {
+          cancelHiderInjection(findWebView(activity.window.decorView))
+          return
+        }
         val webView = findWebView(activity.window.decorView)
         if (webView == null) {
           Log.w(TAG, "installBackButtonHider: WebView not found in $WEB_ACTIVITY_NAME view tree")
@@ -76,10 +87,18 @@ internal object HubspotBackButtonHider {
 
       override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
       override fun onActivityStarted(activity: Activity) {}
-      override fun onActivityPaused(activity: Activity) {}
+      override fun onActivityPaused(activity: Activity) {
+        if (activity.javaClass.name == WEB_ACTIVITY_NAME) {
+          cancelHiderInjection(findWebView(activity.window.decorView))
+        }
+      }
       override fun onActivityStopped(activity: Activity) {}
       override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-      override fun onActivityDestroyed(activity: Activity) {}
+      override fun onActivityDestroyed(activity: Activity) {
+        if (activity.javaClass.name == WEB_ACTIVITY_NAME) {
+          cancelHiderInjection(findWebView(activity.window.decorView))
+        }
+      }
     })
   }
 
@@ -95,7 +114,8 @@ internal object HubspotBackButtonHider {
   }
 
   private fun scheduleHiderInjection(webView: WebView) {
-    val handler = Handler(Looper.getMainLooper())
+    cancelHiderInjection(webView)
+
     val start = System.currentTimeMillis()
     val runnable = object : Runnable {
       override fun run() {
@@ -106,10 +126,19 @@ internal object HubspotBackButtonHider {
         }
         if (System.currentTimeMillis() - start < MAX_SCAN_DURATION_MS) {
           handler.postDelayed(this, RESCAN_INTERVAL_MS)
+        } else {
+          scheduledInjections.remove(webView)
         }
       }
     }
+    scheduledInjections[webView] = runnable
     handler.post(runnable)
+  }
+
+  private fun cancelHiderInjection(webView: WebView?) {
+    if (webView == null) return
+    val runnable = scheduledInjections.remove(webView) ?: return
+    handler.removeCallbacks(runnable)
   }
 
   /**

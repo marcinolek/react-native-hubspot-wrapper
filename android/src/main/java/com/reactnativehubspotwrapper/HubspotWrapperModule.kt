@@ -42,11 +42,12 @@ class HubspotWrapperModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  override fun openChat(chatflow: String, promise: Promise) {
+  override fun openChat(chatflow: String, hideBackToInboxButton: Boolean, promise: Promise) {
     try {
       val intent = Intent(appContext, HubspotWebActivity::class.java)
       intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
       intent.putExtra("chatflow", chatflow)
+      intent.putExtra(HubspotBackButtonHider.EXTRA_HIDE_BACK_TO_INBOX_BUTTON, hideBackToInboxButton)
       appContext.startActivity(intent)
       promise.resolve(null)
     } catch (error: Exception) {

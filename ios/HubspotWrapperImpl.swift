@@ -5,6 +5,8 @@ import WebKit
 
 @objcMembers
 public class HubspotWrapperImpl: NSObject {
+  private static var shouldHideBackToInboxButton = true
+
   /// Substrings used to match `WKWebsiteDataRecord.displayName` (which is the host /
   /// eTLD+1, e.g. `hubspot.com`, `hs-banner.com`, `hsadspixel.net`) for the various
   /// domains the chat widget loads from. Anything matching is wiped on `clearUserData`.
@@ -46,7 +48,7 @@ public class HubspotWrapperImpl: NSObject {
     return true
   }
 
-  public func openChat(_ chatflow: String, error outError: NSErrorPointer) -> Bool {
+  public func openChat(_ chatflow: String, hideBackToInboxButton: Bool, error outError: NSErrorPointer) -> Bool {
     var didSucceed = false
     let presentBlock = {
       guard let rootVC = Self.topViewController() else {
@@ -58,6 +60,7 @@ public class HubspotWrapperImpl: NSObject {
         return
       }
 
+      Self.shouldHideBackToInboxButton = hideBackToInboxButton
       let chatView = HubspotChatView(chatFlow: chatflow)
       let hostingController = UIHostingController(rootView: chatView)
       rootVC.present(hostingController, animated: true)
@@ -164,6 +167,8 @@ public class HubspotWrapperImpl: NSObject {
   /// and visible text. Re-scans periodically for the first few seconds to cover
   /// late-mounted shadow roots. Injected at document start in every frame.
   @objc public static func installBackButtonHider(on controller: WKUserContentController) {
+    guard shouldHideBackToInboxButton else { return }
+
     let script = WKUserScript(
       source: backButtonHiderJS,
       injectionTime: .atDocumentStart,

@@ -8,7 +8,7 @@ export type HubspotProperty = {
 
 export interface Spec extends TurboModule {
   initialize(): Promise<void>;
-  openChat(chatflow: string): Promise<void>;
+  openChat(chatflow: string, hideBackToInboxButton: boolean): Promise<void>;
   setIdentity(identityToken: string, email: string | null): Promise<void>;
   setProperties(properties: ReadonlyArray<HubspotProperty>): Promise<void>;
   clearUserData(): Promise<void>;
