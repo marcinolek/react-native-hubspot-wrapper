@@ -81,10 +81,8 @@ public class HubspotWrapperImpl: NSObject {
     }
   }
 
-  /// Clear the SDK's in-memory identity/property state and synchronously wait for ALL
-  /// HubSpot website data (cookies, localStorage, sessionStorage, IndexedDB, service
-  /// workers, etc.) to be removed from the shared `WKWebsiteDataStore` before invoking
-  /// `completion`.
+  /// Clear the SDK's in-memory identity/property state and synchronously wait for HubSpot's
+  /// visitor-identity cookies to be removed before invoking `completion`.
   ///
   /// Why we do our own clearing instead of relying on the SDK:
   ///
@@ -95,28 +93,28 @@ public class HubspotWrapperImpl: NSObject {
   ///    races the still-in-flight cookie deletion, so the next chat session re-uses
   ///    the previous visitor identity.
   ///
-  /// 2. Even when the SDK's cookie deletion *does* finish, it only removes the two
-  ///    visitor-identity cookies (`hubspotutk`, `messagesUtk`). The chat widget also
-  ///    persists the unsent draft message and other state in `localStorage` /
-  ///    `sessionStorage` / `IndexedDB`. Cookie-only clearing leaves the draft visible
-  ///    on the next open, which is exactly the bug we kept seeing.
-  ///
-  /// We therefore remove all shared WebKit website data during logout. This is intentionally
-  /// broader than HubSpot-only cleanup: fetching individual `WKWebsiteDataRecord`s crashed
-  /// in production inside WebKit's `_fetchDataRecords...allDataStores` path.
+  /// Broader WebKit website-data cleanup is intentionally avoided here. Both
+  /// `dataRecords(ofTypes:)` and `removeData(ofTypes:modifiedSince:)` have crashed in
+  /// production inside WebKit's `allDataStores()` path on iOS 18 simulators.
   public func clearUserData(_ completion: @escaping () -> Void) {
     Task { @MainActor in
       HubspotManager.shared.clearUserData()
-      await Self.deleteAllChatWebsiteData()
+      await Self.deleteHubspotIdentityCookies()
       completion()
     }
   }
 
-  private static func deleteAllChatWebsiteData() async {
-    let store = WKWebsiteDataStore.default()
-    let allTypes = WKWebsiteDataStore.allWebsiteDataTypes()
-    await store.removeData(ofTypes: allTypes, modifiedSince: .distantPast)
+  private static func deleteHubspotIdentityCookies() async {
+    let cookieStore = WKWebsiteDataStore.default().httpCookieStore
+    let matchingCookies = await cookieStore.allCookies().filter {
+      hubspotIdentityCookieNames.contains($0.name)
+    }
+    for cookie in matchingCookies {
+      await cookieStore.deleteCookie(cookie)
+    }
   }
+
+  private static let hubspotIdentityCookieNames = Set(["hubspotutk", "messagesUtk"])
 
   private static func topViewController(
     base: UIViewController? = UIApplication.shared.connectedScenes
