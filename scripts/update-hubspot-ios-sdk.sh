@@ -76,30 +76,6 @@ if old_block not in content:
     raise RuntimeError("Expected Image extension block was not found in HubspotManager.swift")
 hubspot_manager.write_text(content.replace(old_block, new_block, 1))
 
-# 4) Hook our back-button hider into HubspotChatWebView's WKUserContentController.
-#    The actual hider implementation lives in our own non-vendored
-#    HubspotWrapperImpl.swift; this patch just inserts a one-line call so the
-#    hider runs whenever the SDK builds its content controller. We open chat as
-#    a single fresh conversation per session and never want users navigating
-#    into prior threads.
-chat_view = target_dir / "Views/ChatView/HubspotChatView.swift"
-chat_content = chat_view.read_text()
-anchor = (
-    'contentController.addUserScript(WKUserScript(source: js, '
-    'injectionTime: .atDocumentEnd, forMainFrameOnly: false))'
-)
-hook_block = (
-    "\n\n"
-    "            // [react-native-hubspot-wrapper] hide chat \"back to inbox\" button - see HubspotWrapperImpl\n"
-    "            HubspotWrapperImpl.installBackButtonHider(on: contentController)"
-)
-if anchor not in chat_content:
-    raise RuntimeError("Expected setupScripts anchor not found in HubspotChatView.swift")
-if "HubspotWrapperImpl.installBackButtonHider" in chat_content:
-    # Already patched.
-    pass
-else:
-    chat_view.write_text(chat_content.replace(anchor, anchor + hook_block, 1))
 PY
 }
 

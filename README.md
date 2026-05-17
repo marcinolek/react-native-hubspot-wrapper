@@ -61,15 +61,9 @@ await HubspotWrapper.setProperties([{ name: 'plan', value: 'pro' }]);
 await HubspotWrapper.openChat('support');
 ```
 
-By default, `openChat` hides HubSpot's "back to inbox" / conversations-list
-button inside the chat widget. This wrapper is opinionated toward single-chat
-support flows, but you can preserve HubSpot's stock UI per chat:
-
-```ts
-await HubspotWrapper.openChat('support', {
-  hideBackToInboxButton: false,
-});
-```
+`openChat` keeps HubSpot's stock conversations navigation visible. Older
+versions accepted `hideBackToInboxButton`; the option is still accepted for
+compatibility, but it no longer changes the HubSpot UI.
 
 ## API
 
@@ -83,9 +77,7 @@ await HubspotWrapper.openChat('support', {
 
 Opens the HubSpot chat UI for the provided chatflow.
 
-- `hideBackToInboxButton` defaults to `true`.
-- Set `hideBackToInboxButton: false` to keep HubSpot's default conversations
-  navigation visible.
+- `hideBackToInboxButton` is deprecated and ignored.
 
 ### `clearUserData()`
 

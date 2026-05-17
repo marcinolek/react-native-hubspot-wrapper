@@ -349,9 +349,6 @@ struct HubspotChatWebView: UIViewRepresentable {
 
             contentController.addUserScript(WKUserScript(source: js, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
 
-            // [react-native-hubspot-wrapper] hide chat "back to inbox" button - see HubspotWrapperImpl
-            HubspotWrapperImpl.installBackButtonHider(on: contentController)
-
             // create script that triggers on hubspot event, and calls our message handler
 
             let configCallbacksJS = """

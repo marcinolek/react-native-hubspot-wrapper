@@ -22,11 +22,11 @@ class HubspotWrapperModule(reactContext: ReactApplicationContext) :
   private lateinit var hubspotManager: HubspotManager
 
   init {
-    // Install the chat back-button hider as soon as the wrapper module is created.
-    // The hider only does work when `HubspotWebActivity` actually resumes, so this
+    // Install the chat script bridge as soon as the wrapper module is created.
+    // The bridge only does work when `HubspotWebActivity` actually resumes, so this
     // is a cheap one-time `Application.ActivityLifecycleCallbacks` registration.
-    // See `HubspotBackButtonHider` for why this lives outside the activity itself.
-    (appContext as? Application)?.let { HubspotBackButtonHider.installOnce(it) }
+    // See `HubspotChatScriptInstaller` for why this lives outside the activity itself.
+    (appContext as? Application)?.let { HubspotChatScriptInstaller.installOnce(it) }
   }
 
   override fun getName(): String = NAME
@@ -42,12 +42,12 @@ class HubspotWrapperModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  @Suppress("UNUSED_PARAMETER")
   override fun openChat(chatflow: String, hideBackToInboxButton: Boolean, promise: Promise) {
     try {
       val intent = Intent(appContext, HubspotWebActivity::class.java)
       intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
       intent.putExtra("chatflow", chatflow)
-      intent.putExtra(HubspotBackButtonHider.EXTRA_HIDE_BACK_TO_INBOX_BUTTON, hideBackToInboxButton)
       appContext.startActivity(intent)
       promise.resolve(null)
     } catch (error: Exception) {
@@ -57,7 +57,7 @@ class HubspotWrapperModule(reactContext: ReactApplicationContext) :
 
   override fun setIdentity(identityToken: String, email: String?, promise: Promise) {
     try {
-      hubspotManager.setUserIdentity(identityToken, email ?: "")
+      hubspotManager.setUserIdentity(email ?: "", identityToken)
       promise.resolve(null)
     } catch (error: Exception) {
       promise.reject("IDENTITY_ERROR", "Failed to set HubSpot identity", error)

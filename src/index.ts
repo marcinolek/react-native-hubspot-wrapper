@@ -8,6 +8,9 @@ export type SetIdentityParams = {
 };
 
 export type OpenChatOptions = {
+  /**
+   * @deprecated No-op. HubSpot's conversations navigation remains visible.
+   */
   hideBackToInboxButton?: boolean;
 };
 
@@ -24,7 +27,7 @@ const HubspotWrapper = {
 
   openChat(chatflow: string, options: OpenChatOptions = {}): Promise<void> {
     ensureNonEmpty(chatflow, 'chatflow');
-    return NativeHubspotWrapper.openChat(chatflow, options.hideBackToInboxButton ?? true);
+    return NativeHubspotWrapper.openChat(chatflow, options.hideBackToInboxButton ?? false);
   },
 
   setIdentity(params: SetIdentityParams): Promise<void> {
